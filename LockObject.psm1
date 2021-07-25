@@ -138,22 +138,15 @@ function Lock-Object
     )
 
 
-    $ThreadId   = [Threading.Thread]::CurrentThread.ManagedThreadId
-    $WaitHandle = [LockObject.WaitHandles]::GetWaitHandle($InputObject)
-
+    $Params = @{Scope = 'Private'; Option = 'ReadOnly'; Force = $true}
     # Since we're dot-sourcing the caller's script block, we'll use Private scoped variables within
     # this function to make sure the script block doesn't do anything fishy (like changing our
     # InputObject or lockTaken values before we get a chance to release the lock.)
-    $Params = @{
-        Scope  = 'Private'
-        Option = 'ReadOnly'
-        Force  = $true
-    }
-    Set-Variable -Name __inputObject -Value $InputObject @Params
-    Set-Variable -Name __scriptBlock -Value $ScriptBlock @Params
-    Set-Variable -Name __threadID -Value $ThreadId @Params
-    Set-Variable -Name __waitHandle -Value $WaitHandle @Params
-    Set-Variable -Name __lockTaken -Value $false -Scope Private
+    Set-Variable @Params __inputObject $InputObject
+    Set-Variable @Params __scriptBlock $ScriptBlock
+    Set-Variable @Params __threadID [Threading.Thread]::CurrentThread.ManagedThreadId
+    Set-Variable @Params __waitHandle [LockObject.WaitHandles]::GetWaitHandle($InputObject)
+    Set-Variable -Scope 'Private' __lockTaken $false
 
 
     try
@@ -215,6 +208,6 @@ function Lock-Object
 }
 
 
-Set-Alias -Name Lock -Value Lock-Object
+Set-Alias Lock Lock-Object
 
 Export-ModuleMember -Function Lock-Object -Alias Lock
