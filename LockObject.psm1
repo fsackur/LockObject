@@ -1,4 +1,21 @@
 
+# We want a WaitHandle so that an object releasing a lock can signal other threads trying to acquire
+# the lock.
+# This needs to be weakly-referenced to avoid memory leaks. Therefore, we use ConditionalWeakTable,
+# which is also thread-safe.
+# This class is dictionary-like but not a full dictionary.
+# Do not explicitly add values; instead, call GetValue and pass a delegate to create a missing value.
+$Params = @{
+    'Name'        = '__waitHandles'
+    'Value'       = [Runtime.CompilerServices.ConditionalWeakTable[object, Threading.AutoResetEvent]]::new()
+    'Description' = 'Weak-reference lookup table of wait handles for lock objects.'
+    'Scope'       = 'Script'
+    'Force'       = $true
+    'Option'      = 'ReadOnly'
+}
+Set-Variable @Params
+
+
 function Lock-Object
 {
     <#
@@ -81,6 +98,10 @@ function Lock-Object
 
     $ThreadId = [Threading.Thread]::CurrentThread.ManagedThreadId
 
+    # Get the existing WaitHandle or create a new one.
+    # Passing True means that the first thread to call .WaitOne() will resume instantly
+    $WaitHandle = $Script:__waitHandles.GetValue($__inputObject, {[Threading.AutoResetEvent]::new($true)})
+
     # Since we're dot-sourcing the caller's script block, we'll use Private scoped variables within
     # this function to make sure the script block doesn't do anything fishy (like changing our
     # InputObject or lockTaken values before we get a chance to release the lock.)
@@ -92,6 +113,7 @@ function Lock-Object
     Set-Variable -Name __inputObject -Value $InputObject @Params
     Set-Variable -Name __scriptBlock -Value $ScriptBlock @Params
     Set-Variable -Name __threadID -Value $ThreadId @Params
+    Set-Variable -Name __waitHandle -Value $WaitHandle @Params
     Set-Variable -Name __lockTaken -Value $false -Scope Private
 
 
