@@ -65,6 +65,14 @@ function Lock-Object
         allows you to assign variables inside the script block and have them be available to your
         script or function after the end of the lock block, if desired.
 
+        .PARAMETER Wait
+        Specifies that the current thread should wait until the lock becomes available. If you do
+        not specify a value to the Timeout parameter, this command will wait indefinitely.
+
+        .PARAMETER Timeout
+        Provide a value in milliseconds that the current thread should wait. Passing 0 causes this
+        command to wait indefinitely.
+
         .EXAMPLE
         $hashTable = @{}
         lock $hashTable.SyncRoot {
@@ -98,7 +106,7 @@ function Lock-Object
         http://learn-powershell.net/2013/04/19/sharing-variables-and-live-objects-between-powershell-runspaces/
     #>
 
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'NoWait')]
     param
     (
         [Parameter(Mandatory = $true, Position = 0)]
@@ -120,7 +128,13 @@ function Lock-Object
         [object]$InputObject,
 
         [Parameter(Mandatory = $true, Position = 1)]
-        [scriptblock]$ScriptBlock
+        [scriptblock]$ScriptBlock,
+
+        [Parameter(ParameterSetName = 'Wait')]
+        [switch]$Wait,
+
+        [Parameter(ParameterSetName = 'Wait')]
+        [int]$Timeout
     )
 
 
