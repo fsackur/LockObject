@@ -59,6 +59,19 @@ function Lock-Object
         [Parameter(Mandatory = $true, Position = 0)]
         [AllowEmptyString()]
         [AllowEmptyCollection()]
+        [ValidateScript({
+            if ($__inputObject.GetType().IsValueType)
+            {
+                $Params = @{
+                    Message      = "Lock object cannot be a value type."
+                    TargetObject = $__inputObject
+                    Category     = 'InvalidArgument'
+                    ErrorId      = 'CannotLockValueType'
+                }
+                Write-Error @Params -ErrorAction Stop
+            }
+            return $true
+        })]
         [object]$InputObject,
 
         [Parameter(Mandatory = $true, Position = 1)]
@@ -80,20 +93,6 @@ function Lock-Object
     Set-Variable -Name __scriptBlock -Value $ScriptBlock @Params
     Set-Variable -Name __threadID -Value $ThreadId @Params
     Set-Variable -Name __lockTaken -Value $false -Scope Private
-
-
-    if ($__inputObject.GetType().IsValueType)
-    {
-        $Params = @{
-            Message      = "Lock object cannot be a value type."
-            TargetObject = $__inputObject
-            Category     = [System.Management.Automation.ErrorCategory]::InvalidArgument
-            ErrorId      = 'CannotLockValueType'
-        }
-
-        Write-Error @Params
-        return
-    }
 
 
     try
