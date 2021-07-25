@@ -3,17 +3,45 @@
 # the lock.
 # This needs to be weakly-referenced to avoid memory leaks. Therefore, we use ConditionalWeakTable,
 # which is also thread-safe.
-# This class is dictionary-like but not a full dictionary.
-# Do not explicitly add values; instead, call GetValue and pass a delegate to create a missing value.
-$Params = @{
-    'Name'        = '__waitHandles'
-    'Value'       = [Runtime.CompilerServices.ConditionalWeakTable[object, Threading.AutoResetEvent]]::new()
-    'Description' = 'Weak-reference lookup table of wait handles for lock objects.'
-    'Scope'       = 'Script'
-    'Force'       = $true
-    'Option'      = 'ReadOnly'
+# This table needs to be shared among all threads, which is tricky if we use PowerShell. Therefore,
+# we use a static .NET class, which is the same across the entire AppDomain. PowerShell only runs in
+# a single AppDomain, so this class will  provide the same WaitHandle for a given object across all
+# threads.
+$TypeDef = @'
+    using System.Runtime.CompilerServices;
+    using System.Threading;
+
+    namespace LockObject
+    {
+        public static class WaitHandles
+        {
+            private static ConditionalWeakTable<object, AutoResetEvent> table = new ConditionalWeakTable<object, AutoResetEvent>();
+
+            private static AutoResetEvent CreateCallback(object obj)
+            {
+                return new AutoResetEvent(true);
+            }
+
+            public static AutoResetEvent GetWaitHandle(object obj)
+            {
+                // this will create a value using CreateCallback if one doesn't exist already
+                return table.GetValue(obj, CreateCallback);
+            }
+        }
+    }
+'@
+
+try
+{
+    Add-Type $TypeDef -ErrorAction Stop
 }
-Set-Variable @Params
+catch
+{
+    if ($_ -notmatch 'already exists')
+    {
+        throw
+    }
+}
 
 
 function Lock-Object
@@ -96,11 +124,8 @@ function Lock-Object
     )
 
 
-    $ThreadId = [Threading.Thread]::CurrentThread.ManagedThreadId
-
-    # Get the existing WaitHandle or create a new one.
-    # Passing True means that the first thread to call .WaitOne() will resume instantly
-    $WaitHandle = $Script:__waitHandles.GetValue($__inputObject, {[Threading.AutoResetEvent]::new($true)})
+    $ThreadId   = [Threading.Thread]::CurrentThread.ManagedThreadId
+    $WaitHandle = [LockObject.WaitHandles]::GetWaitHandle($InputObject)
 
     # Since we're dot-sourcing the caller's script block, we'll use Private scoped variables within
     # this function to make sure the script block doesn't do anything fishy (like changing our
