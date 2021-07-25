@@ -158,6 +158,26 @@ function Lock-Object
 
     try
     {
+        # When we enter WaitOne, we block until the timeout expires or .Set() is called on the wait
+        # handle by another thread.
+        # When .Set() is called, only one waiting thread will receive the signal. Therefore, no race
+        # condition can occur - as long as only this module is used to lock and release.
+        $null = if ($PSCmdlet.ParameterSetName -eq 'NoWait')
+        {
+            $__waitHandle.WaitOne(0)
+        }
+        else
+        {
+            if ($Timeout)
+            {
+                $__waitHandle.WaitOne($Timeout)
+            }
+            else
+            {
+                $__waitHandle.WaitOne()     # wait indefinitely
+            }
+        }
+
         Write-Verbose "Thread ${__threadID}: Requesting lock on $__inputObject"
         [System.Threading.Monitor]::Enter($__inputObject)
         $__lockTaken = $true
@@ -186,6 +206,9 @@ function Lock-Object
         {
             Write-Verbose "Thread ${__threadID}: Releasing lock on $__inputObject"
             [System.Threading.Monitor]::Exit($__inputObject)
+            # Signal to any thread that's waiting in a WaitOne; only one waiter will receive the
+            # signal and unblock
+            $__waitHandle.Set()
             Write-Verbose "Thread ${__threadID}: Lock released on $__inputObject"
         }
     }
